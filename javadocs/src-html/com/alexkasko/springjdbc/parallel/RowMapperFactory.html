@@ -1,0 +1,88 @@
+<HTML>
+<BODY BGCOLOR="white">
+<PRE>
+<FONT color="green">001</FONT>    package com.alexkasko.springjdbc.parallel;<a name="line.1"></a>
+<FONT color="green">002</FONT>    <a name="line.2"></a>
+<FONT color="green">003</FONT>    import org.springframework.jdbc.core.RowMapper;<a name="line.3"></a>
+<FONT color="green">004</FONT>    import org.springframework.jdbc.core.namedparam.SqlParameterSource;<a name="line.4"></a>
+<FONT color="green">005</FONT>    <a name="line.5"></a>
+<FONT color="green">006</FONT>    /**<a name="line.6"></a>
+<FONT color="green">007</FONT>     * Spring's row mappers haven't access to query params.<a name="line.7"></a>
+<FONT color="green">008</FONT>     * This class may be used if such access is needed on result set mapping.<a name="line.8"></a>
+<FONT color="green">009</FONT>     *<a name="line.9"></a>
+<FONT color="green">010</FONT>     * @author alexkasko<a name="line.10"></a>
+<FONT color="green">011</FONT>     * Date: 8/18/12<a name="line.11"></a>
+<FONT color="green">012</FONT>     * @see ParallelQueriesIterator<a name="line.12"></a>
+<FONT color="green">013</FONT>     */<a name="line.13"></a>
+<FONT color="green">014</FONT>    public interface RowMapperFactory&lt;T, P extends SqlParameterSource&gt; {<a name="line.14"></a>
+<FONT color="green">015</FONT>        /**<a name="line.15"></a>
+<FONT color="green">016</FONT>         * Must produce row mapper. Will be called by {@link ParallelQueriesIterator} before every SQL query<a name="line.16"></a>
+<FONT color="green">017</FONT>         *<a name="line.17"></a>
+<FONT color="green">018</FONT>         * @param params query params<a name="line.18"></a>
+<FONT color="green">019</FONT>         * @return row mapper for query results<a name="line.19"></a>
+<FONT color="green">020</FONT>         */<a name="line.20"></a>
+<FONT color="green">021</FONT>        RowMapper&lt;T&gt; produce(P params);<a name="line.21"></a>
+<FONT color="green">022</FONT>    }<a name="line.22"></a>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</PRE>
+</BODY>
+</HTML>
