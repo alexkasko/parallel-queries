@@ -17,6 +17,14 @@ Javadocs for the latest release are available [here](http://alexkasko.github.com
 Library usage
 -------------
 
+Maven dependency (available in central repository):
+
+    <dependency>
+        <groupId>com.alexkasko.springjdbc</groupId>
+        <artifactId>parallel-queries</artifactId>
+        <version>1.0</version>
+    </dependency>
+
 To start parallel query execution you should create instance of `ParallelQueriesIterator` and call `start` method
 providing list of parameters mappings:
 
@@ -115,3 +123,10 @@ License information
 -------------------
 
 Library is provided under the terms of [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
+Changelog
+---------
+
+**1.0** (2012-11-09)
+
+ * initial version
