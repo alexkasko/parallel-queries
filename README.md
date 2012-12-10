@@ -7,7 +7,7 @@ It takes SQL query string and list of [parameters mappings](http://static.spring
 and executes query once for each list element in parallel. Combined queries results are provided to application as `java.util.Iterator`.
 Data source choosing for next query may be controlled from application.
 
-In runtime library only depends on [spring-jdbc](http://static.springsource.org/spring/docs/3.0.x/spring-framework-reference/html/jdbc.html)
+In runtime library depends on [spring-jdbc](http://static.springsource.org/spring/docs/3.0.x/spring-framework-reference/html/jdbc.html)
 and [guava](http://code.google.com/p/guava-libraries/).
 
 Library is available in [Maven cental](http://repo1.maven.org/maven2/com/alexkasko/springjdbc/).
@@ -122,7 +122,7 @@ To limit max parallel queries (to value less then parameters list size) you shou
 License information
 -------------------
 
-Library is provided under the terms of [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+This project is released under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
 Changelog
 ---------
