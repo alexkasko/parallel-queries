@@ -1,6 +1,6 @@
 package com.alexkasko.springjdbc.parallel.accessor;
 
-import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import java.util.Collection;
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Date: 6/11/12
  * @see DataSourceAccessor
  */
-public final class RoundRobinAccessor<T extends JdbcOperations> extends ImmutableAccessor<T, SqlParameterSource> {
+public class RoundRobinAccessor<T extends NamedParameterJdbcOperations> extends ImmutableAccessor<T, SqlParameterSource> {
     private AtomicInteger index = new AtomicInteger(0);
 
     /**
@@ -34,7 +34,7 @@ public final class RoundRobinAccessor<T extends JdbcOperations> extends Immutabl
      * @param <T> JdbcOperations implementation
      * @return new accessor instance
      */
-    public static <T extends JdbcOperations> RoundRobinAccessor<T> of(Collection<T> target) {
+    public static <T extends NamedParameterJdbcOperations> RoundRobinAccessor<T> of(Collection<T> target) {
         return new RoundRobinAccessor<T>(target);
     }
 

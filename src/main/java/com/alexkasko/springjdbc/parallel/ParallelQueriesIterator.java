@@ -8,6 +8,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.*;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import javax.sql.DataSource;
@@ -20,7 +21,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.alexkasko.springjdbc.parallel.JdbcTemplateFunction.NPJT_FUNCTION;
+import static com.alexkasko.springjdbc.parallel.NamedParameterJdbcTemplateFunction.NPJT_FUNCTION;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -32,11 +33,10 @@ import static org.springframework.util.StringUtils.hasText;
  * Iteration will block awaiting data loaded from sources.
  * Typical usage is to get new instance somewhere (spring prototype bean etc.), provide query params
  * with <code>start</code> method and iterate over until end.
- * Data source exceptions will be propagates as runtime exceptions thrown on 'next()' or 'hasNext()' call.
+ * Data source exceptions will be propagated as runtime exceptions thrown on 'next()' or 'hasNext()' call.
  * All parallel queries will be cancelled on one query error.
- * Despite using {@code JdbcOperations} instead of {@code NamedParameterJdbcTemplate} iterator takes sql
- * in the same format as {@code NamedParameterJdbcTemplate} does (with {@code :palceholders}) and map declared parameters to
- * provided values using the same methods as {@code NamedParameterJdbcTemplate}.
+ * Iterator takes sql in the same format as {@code NamedParameterJdbcTemplate} does (with {@code :palceholders})
+ * and map declared parameters to provided values using the same methods as {@code NamedParameterJdbcTemplate}.
  * <b>NOT</b> thread-safe (tbd: specify points that break thread safety), instance may be reused calling <code>start</code> method, but only in one thread simultaneously.
  *
  * @author  alexkasko
@@ -47,6 +47,7 @@ import static org.springframework.util.StringUtils.hasText;
 
 public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     private static final Log logger = LogFactory.getLog(ParallelQueriesIterator.class);
+    private static final int OFFER_WAIT_ON_ERROR_SECONDS = 10;
 
     private final Object endOfDataObject = new Object();
     private final FirstValueHolder<RuntimeException> exceptionHolder = new FirstValueHolder<RuntimeException>();
@@ -150,11 +151,16 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         // set cancelled state
         boolean wasCancelled = cancelled.getAndSet(true);
         if(wasCancelled) return 0;
-        int res = 0;
+        // minimize workers locking danger
+        dataQueue.clear();
+        exceptionHolder.set(new ParallelQueriesException("cancelled"));
+        boolean accepted = dataQueue.offer(exceptionHolder);
+        if(!accepted) logger.warn("Cancellation offer wasn't accepted, main thread might not be notified about cancellation");
         // cancel statements
         for(Statement st : activeStatements.values()) {
             cancelStatement(st);
         }
+        int res = 0;
         // cancel threads
         for(Future<?> fu : futures) {
             if(fu.cancel(true)) res += 1;
@@ -219,6 +225,17 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         }
     }
 
+    private void offerException(RuntimeException e) {
+        boolean accepted;
+        try {
+            exceptionHolder.set(e);
+            accepted = dataQueue.offer(e, OFFER_WAIT_ON_ERROR_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e1) {
+            accepted = false;
+        }
+        if(!accepted) logger.warn("Exception was not accepted by queue", e);
+    }
+
     private Object takeData() {
         try {
             return dataQueue.take();
@@ -237,11 +254,11 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     }
 
     private class Worker implements Runnable {
-        private final JdbcOperations jo;
+        private final NamedParameterJdbcOperations npjo;
         private final SqlParameterSource params;
 
-        private Worker(JdbcOperations jo, SqlParameterSource params) {
-            this.jo = jo;
+        private Worker(NamedParameterJdbcOperations npjo, SqlParameterSource params) {
+            this.npjo = npjo;
             this.params = params;
         }
 
@@ -257,12 +274,11 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
                 Extractor extractor = new Extractor(mapper);
                 // sql parameters processing is the same as in NamedParameterJdbcTemplate
                 PreparedStatementCreator psc = new CancellableStatementCreator(registryKey, activeStatements, sql, params);
-                jo.query(psc, extractor);
-                for(ParallelQueriesListener li : listeners) li.success(jo, sql, params);
+                npjo.getJdbcOperations().query(psc, extractor);
+                for(ParallelQueriesListener li : listeners) li.success(npjo, sql, params);
             } catch (Throwable e) { // we do not believe to JDBC drivers' error reporting
-                exceptionHolder.set(new ParallelQueriesException(e));
-                putData(exceptionHolder);
-                for(ParallelQueriesListener li : listeners) li.error(jo, sql, params, e);
+                offerException(new ParallelQueriesException(e));
+                for(ParallelQueriesListener li : listeners) li.error(npjo, sql, params, e);
             } finally {
                 activeStatements.remove(registryKey);
             }
@@ -281,15 +297,14 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
             try {
                 int rowNum = 0;
                 while(rs.next()) {
-                    if(cancelled.get()) throw new RuntimeException("Execution was cancelled");
+                    if(cancelled.get()) return null;
                     Object obj = mapper.mapRow(rs, rowNum++);
                     dataQueue.put(obj);
                 }
-                if(cancelled.get()) throw new RuntimeException("Execution was cancelled");
+                if(cancelled.get()) return null;
                 dataQueue.put(endOfDataObject);
             } catch(Throwable e) { // we do not believe to JDBC drivers' error reporting
-                exceptionHolder.set(new ParallelQueriesException(e));
-                putData(exceptionHolder);
+                offerException(new ParallelQueriesException(e));
             }
             return null;
         }
@@ -302,8 +317,8 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         // generic arguments to iterator itself
         public Future<?> apply(SqlParameterSource params) {
             DataSourceAccessor ungeneric = sources;
-            JdbcOperations jo = (JdbcOperations) ungeneric.get(params);
-            Worker worker = new Worker(jo, params);
+            NamedParameterJdbcOperations npjo = ungeneric.get(params);
+            Worker worker = new Worker(npjo, params);
             return executor.submit(worker);
         }
     }

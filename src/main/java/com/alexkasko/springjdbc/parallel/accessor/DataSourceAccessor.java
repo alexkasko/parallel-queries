@@ -1,6 +1,6 @@
 package com.alexkasko.springjdbc.parallel.accessor;
 
-import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import java.util.Collection;
@@ -12,7 +12,7 @@ import java.util.Collection;
  * Date: 6/11/12
  * @see RoundRobinAccessor
  */
-public interface DataSourceAccessor<T extends JdbcOperations, P extends SqlParameterSource> extends Collection<T> {
+public interface DataSourceAccessor<T extends NamedParameterJdbcOperations, P extends SqlParameterSource> extends Collection<T> {
     /**
      *
      *

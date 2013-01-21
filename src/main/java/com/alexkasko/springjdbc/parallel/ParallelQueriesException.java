@@ -12,6 +12,11 @@ import static java.lang.Thread.currentThread;
  * @see ParallelQueriesIterator
  */
 class ParallelQueriesException extends DataAccessException {
+
+    ParallelQueriesException(String msg) {
+        super("Thread: '" + currentThread().getName() + "', message: '" + msg + "'");
+    }
+
     public ParallelQueriesException(Throwable cause) {
         super("Thread: '" + currentThread().getName() + "', message: '" + cause.getMessage() + "'", cause);
     }

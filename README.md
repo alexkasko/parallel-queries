@@ -22,7 +22,7 @@ Maven dependency (available in central repository):
     <dependency>
         <groupId>com.alexkasko.springjdbc</groupId>
         <artifactId>parallel-queries</artifactId>
-        <version>1.0</version>
+        <version>1.1</version>
     </dependency>
 
 To start parallel query execution you should create instance of `ParallelQueriesIterator` and call `start` method
@@ -61,16 +61,16 @@ To support JDBC tuning iterator can take collection of preconfigured `JdbcTempla
 
 ####data source accessors
 
-Data sources (wrapped into `JdbcTemplate`) may be provided using `DataSourceAccessor` interface. Implementations of
+Data sources (wrapped into `NamedParameterJdbcOperations`) may be provided using `DataSourceAccessor` interface. Implementations of
 this interface holds the list of actual data sources and decides what source to use for next query based on
 query parameters mapping as an argument for `get` method. Application may provide its own `DataSourceAccessor`
-implementation (with own `JdbcOperations` and `SqlParameterSource` implementation) with necessary logic.
+implementation (with own `NamedParameterJdbcOperations` and `SqlParameterSource` implementation) with necessary logic.
 
 By default library uses `RoundRobinAccessor` that returns data sources in circular order ignoring actual query parameters.
 
 ####named parameters support
 
-Library uses `JdbcOperations` instead of `NamedParameterJdbcOperations` to utilize more fine grained access
+Library internally uses `JdbcOperations` instead of `NamedParameterJdbcOperations` to utilize more fine grained access
 to query execution (to support query cancelling). Despite it, library supports SQL queries with named parameters
 using `:placeholder` syntax using exactly the same implementation of named parameters as `NamedParameterJdbcTemplate`.
 
@@ -126,6 +126,10 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+
+**1.1** (2013-01-21)
+
+ * accessors use `NamedParameterJdbcTemplate` instead of `JdbcTemplates`
 
 **1.0** (2012-11-09)
 

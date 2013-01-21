@@ -1,6 +1,6 @@
 package com.alexkasko.springjdbc.parallel;
 
-import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 /**
@@ -14,17 +14,17 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSource;
  */
 public interface ParallelQueriesListener {
     /**
-     * @param jo wrapper for data source, that was used to execute query
+     * @param npjo wrapper for data source, that was used to execute query
      * @param sql SQL query
      * @param params query input parameters
      */
-    void success(JdbcOperations jo, String sql, SqlParameterSource params);
+    void success(NamedParameterJdbcOperations npjo, String sql, SqlParameterSource params);
 
     /**
-     * @param jo wrapper for data source, that was used to execute query
+     * @param npjo wrapper for data source, that was used to execute query
      * @param sql SQL query
      * @param params query input parameters
      * @param ex exception from JDBC
      */
-    void error(JdbcOperations jo, String sql, SqlParameterSource params, Throwable ex);
+    void error(NamedParameterJdbcOperations npjo, String sql, SqlParameterSource params, Throwable ex);
 }

@@ -1,15 +1,15 @@
 package com.alexkasko.springjdbc.parallel;
 
-import com.alexkasko.springjdbc.parallel.accessor.RoundRobinAccessor;
+import com.alexkasko.springjdbc.parallel.accessor.RoundRobinNpjtAccessor;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
 import org.springframework.dao.DataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -36,12 +36,12 @@ public class ParallelQueriesIteratorTest {
         DriverManagerDataSource ds = new DriverManagerDataSource();
         ds.setDriverClassName("org.h2.Driver");
         ds.setUrl("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1");
-        JdbcTemplate jt = new JdbcTemplate(ds);
-        jt.execute("create table foo(bar varchar(42))");
-        jt.update("insert into foo(bar) values('41')");
-        jt.update("insert into foo(bar) values('42')");
-        jt.update("insert into foo(bar) values('43')");
-        RoundRobinAccessor<JdbcTemplate> robin = RoundRobinAccessor.of(ImmutableList.of(jt));
+        NamedParameterJdbcTemplate jt = new NamedParameterJdbcTemplate(ds);
+        jt.getJdbcOperations().execute("create table foo(bar varchar(42))");
+        jt.getJdbcOperations().update("insert into foo(bar) values('41')");
+        jt.getJdbcOperations().update("insert into foo(bar) values('42')");
+        jt.getJdbcOperations().update("insert into foo(bar) values('43')");
+        RoundRobinNpjtAccessor robin = new RoundRobinNpjtAccessor(jt);
         Collection<MapSqlParameterSource> params = ImmutableList.of(new MapSqlParameterSource(ImmutableMap.of("val", 40)));
         // single thread used, buffer must me bigger than data
         ExecutorService sameThreadExecutor = MoreExecutors.sameThreadExecutor();
@@ -67,18 +67,18 @@ public class ParallelQueriesIteratorTest {
 //    @Test
     public void testStress() {
         { // single thread
-            JdbcTemplate jt = createJT();
+            NamedParameterJdbcTemplate jt = createJT();
             long start = currentTimeMillis();
-            long res = jt.query("select bar from foo", new Extractor());
+            long res = jt.getJdbcOperations().query("select bar from foo", new Extractor());
 //            1300
             System.out.println("10000 records from one thread: " + (currentTimeMillis() - start));
             assertEquals(res, 10000);
         }
         { // 20 threads
             int count = 20;
-            ImmutableList.Builder<JdbcTemplate> builder = ImmutableList.builder();
+            ImmutableList.Builder<NamedParameterJdbcTemplate> builder = ImmutableList.builder();
             for(int i = 0; i < count; i++) builder.add(createJT());
-            RoundRobinAccessor<JdbcTemplate> robin = RoundRobinAccessor.of(builder.build());
+            RoundRobinNpjtAccessor robin = new RoundRobinNpjtAccessor(builder.build());
             long start = currentTimeMillis();
             ParallelQueriesIterator<String> iter = new ParallelQueriesIterator<String>(robin, "select bar from foo",
                     Executors.newCachedThreadPool(), new SlowpokeMapper(), 100)
@@ -94,12 +94,12 @@ public class ParallelQueriesIteratorTest {
         }
     }
 
-    private JdbcTemplate createJT() {
+    private NamedParameterJdbcTemplate createJT() {
         DriverManagerDataSource ds = new DriverManagerDataSource();
         ds.setDriverClassName("org.h2.Driver");
         ds.setUrl("jdbc:h2:mem:" + randomAlphanumeric(10) + ";DB_CLOSE_DELAY=-1");
-        JdbcTemplate jt = new JdbcTemplate(ds);
-        jt.execute("create table foo(bar varchar(42))");
+        NamedParameterJdbcTemplate jt = new NamedParameterJdbcTemplate(ds);
+        jt.getJdbcOperations().execute("create table foo(bar varchar(42))");
         for(int i=0; i< 10000; i++) {
             jt.update("insert into foo(bar) values(:str)", ImmutableMap.of("str", randomAscii(42)));
         }
