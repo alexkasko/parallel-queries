@@ -3,7 +3,7 @@
 <PRE>
 <FONT color="green">001</FONT>    package com.alexkasko.springjdbc.parallel.accessor;<a name="line.1"></a>
 <FONT color="green">002</FONT>    <a name="line.2"></a>
-<FONT color="green">003</FONT>    import org.springframework.jdbc.core.JdbcOperations;<a name="line.3"></a>
+<FONT color="green">003</FONT>    import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;<a name="line.3"></a>
 <FONT color="green">004</FONT>    import org.springframework.jdbc.core.namedparam.SqlParameterSource;<a name="line.4"></a>
 <FONT color="green">005</FONT>    <a name="line.5"></a>
 <FONT color="green">006</FONT>    import java.util.Collection;<a name="line.6"></a>
@@ -15,7 +15,7 @@
 <FONT color="green">012</FONT>     * Date: 6/11/12<a name="line.12"></a>
 <FONT color="green">013</FONT>     * @see RoundRobinAccessor<a name="line.13"></a>
 <FONT color="green">014</FONT>     */<a name="line.14"></a>
-<FONT color="green">015</FONT>    public interface DataSourceAccessor&lt;T extends JdbcOperations, P extends SqlParameterSource&gt; extends Collection&lt;T&gt; {<a name="line.15"></a>
+<FONT color="green">015</FONT>    public interface DataSourceAccessor&lt;T extends NamedParameterJdbcOperations, P extends SqlParameterSource&gt; extends Collection&lt;T&gt; {<a name="line.15"></a>
 <FONT color="green">016</FONT>        /**<a name="line.16"></a>
 <FONT color="green">017</FONT>         *<a name="line.17"></a>
 <FONT color="green">018</FONT>         *<a name="line.18"></a>
