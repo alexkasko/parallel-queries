@@ -47,10 +47,9 @@ import static org.springframework.util.StringUtils.hasText;
 
 public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     private static final Log logger = LogFactory.getLog(ParallelQueriesIterator.class);
-    private static final int OFFER_WAIT_ON_ERROR_SECONDS = 10;
 
     private final Object endOfDataObject = new Object();
-    private final FirstValueHolder<RuntimeException> exceptionHolder = new FirstValueHolder<RuntimeException>();
+    private final ExceptionHolder exceptionHolder = new ExceptionHolder();
 
     private final DataSourceAccessor<?, ?> sources;
     private final String sql;
@@ -151,11 +150,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         // set cancelled state
         boolean wasCancelled = cancelled.getAndSet(true);
         if(wasCancelled) return 0;
-        // minimize workers locking danger
-        dataQueue.clear();
         exceptionHolder.set(new ParallelQueriesException("cancelled"));
-        boolean accepted = dataQueue.offer(exceptionHolder);
-        if(!accepted) logger.warn("Cancellation offer wasn't accepted, main thread might not be notified about cancellation");
         // cancel statements
         for(Statement st : activeStatements.values()) {
             cancelStatement(st);
@@ -205,13 +200,14 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     @SuppressWarnings("unchecked")
     protected T computeNext() {
         checkState(started.get(), "Iterator wasn't started, call 'start' method first");
+        RuntimeException workerException = exceptionHolder.get();
+        if(null != workerException) {
+            cancel();
+            throw workerException;
+        }
         Object ob;
         while(endOfDataObject == (ob = takeData())) {
             if(0 == sourcesRemained.decrementAndGet()) return endOfData();
-        }
-        if(exceptionHolder == ob) {
-            cancel();
-            throw exceptionHolder.get();
         }
         return (T) ob;
     }
@@ -221,19 +217,8 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
             dataQueue.put(data);
         } catch(InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ParallelQueriesException(e);
+            throw new RuntimeException(e);
         }
-    }
-
-    private void offerException(RuntimeException e) {
-        boolean accepted;
-        try {
-            exceptionHolder.set(e);
-            accepted = dataQueue.offer(e, OFFER_WAIT_ON_ERROR_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException e1) {
-            accepted = false;
-        }
-        if(!accepted) logger.warn("Exception was not accepted by queue", e);
     }
 
     private Object takeData() {
@@ -277,7 +262,8 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
                 npjo.getJdbcOperations().query(psc, extractor);
                 for(ParallelQueriesListener li : listeners) li.success(npjo, sql, params);
             } catch (Throwable e) { // we do not believe to JDBC drivers' error reporting
-                offerException(new ParallelQueriesException(e));
+                ParallelQueriesException pqe = e instanceof ParallelQueriesException ? (ParallelQueriesException) e : new ParallelQueriesException(e);
+                exceptionHolder.set(pqe);
                 for(ParallelQueriesListener li : listeners) li.error(npjo, sql, params, e);
             } finally {
                 activeStatements.remove(registryKey);
@@ -299,14 +285,15 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
                 while(rs.next()) {
                     if(cancelled.get()) return null;
                     Object obj = mapper.mapRow(rs, rowNum++);
-                    dataQueue.put(obj);
+                    putData(obj);
                 }
                 if(cancelled.get()) return null;
-                dataQueue.put(endOfDataObject);
+                putData(endOfDataObject);
+                return null;
             } catch(Throwable e) { // we do not believe to JDBC drivers' error reporting
-                offerException(new ParallelQueriesException(e));
+                if(e instanceof SQLException) throw (SQLException) e;
+                throw new SQLException(e);
             }
-            return null;
         }
     }
 
