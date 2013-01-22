@@ -58,6 +58,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     // was made non-generic to allow endOfDataObject
     private final ArrayBlockingQueue<Object> dataQueue;
     private final List<ParallelQueriesListener> listeners = Lists.newArrayList();
+    private final int maxDataPollWaitSeconds;
 
     private AtomicBoolean started = new AtomicBoolean(false);
     private AtomicInteger sourcesRemained = new AtomicInteger(0);
@@ -77,7 +78,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
      */
     public ParallelQueriesIterator(Collection<DataSource> sources, String sql, RowMapper<T> mapper) {
         this(RoundRobinAccessor.of(Collections2.transform(sources, NPJT_FUNCTION)),
-                sql, Executors.newCachedThreadPool(), mapper, 1024);
+                sql, Executors.newCachedThreadPool(), mapper, 1024, 60);
     }
 
     /**
@@ -90,8 +91,8 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
      * @param bufferSize size of ArrayBlockingQueue data buffer
      */
     public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources,
-                                   String sql, ExecutorService executor, RowMapper<T> mapper, int bufferSize) {
-        this(sources, sql, executor, SingletoneRowMapperFactory.of(mapper), bufferSize);
+                                   String sql, ExecutorService executor, RowMapper<T> mapper, int bufferSize, int maxDataPollWaitSeconds) {
+        this(sources, sql, executor, SingletoneRowMapperFactory.of(mapper), bufferSize, maxDataPollWaitSeconds);
     }
 
     /**
@@ -104,7 +105,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
      * @param bufferSize size of ArrayBlockingQueue data buffer
      */
     public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources,
-                                   String sql, ExecutorService executor, RowMapperFactory<T, ?> mapperFactory, int bufferSize) {
+                                   String sql, ExecutorService executor, RowMapperFactory<T, ?> mapperFactory, int bufferSize, int maxDataPollWaitSeconds) {
         checkNotNull(sources, "Provided data source accessor is null");
         checkArgument(sources.size() > 0, "No data sources provided");
         checkArgument(hasText(sql), "Provided sql query is blank");
@@ -116,6 +117,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         this.mapperFactory = mapperFactory;
         this.executor = executor;
         this.dataQueue = new ArrayBlockingQueue<Object>(bufferSize);
+        this.maxDataPollWaitSeconds = maxDataPollWaitSeconds;
     }
 
     /**
@@ -200,11 +202,6 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     @SuppressWarnings("unchecked")
     protected T computeNext() {
         checkState(started.get(), "Iterator wasn't started, call 'start' method first");
-        RuntimeException workerException = exceptionHolder.get();
-        if(null != workerException) {
-            cancel();
-            throw workerException;
-        }
         Object ob;
         while(endOfDataObject == (ob = takeData())) {
             if(0 == sourcesRemained.decrementAndGet()) return endOfData();
@@ -223,10 +220,24 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
 
     private Object takeData() {
         try {
-            return dataQueue.take();
+            for(int i=0; i< maxDataPollWaitSeconds; i++) {
+                checkException();
+                Object res = dataQueue.poll(1, TimeUnit.SECONDS);
+                if(null != res) return res;
+            }
+            throw new ParallelQueriesException(
+                    "Data wait timeout exceeded: '" + maxDataPollWaitSeconds + " seconds', alive workers count: '" + sourcesRemained.get() + "'");
         } catch(InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ParallelQueriesException(e);
+        }
+    }
+
+    private void checkException() {
+        RuntimeException workerException = exceptionHolder.get();
+        if (null != workerException) {
+            cancel();
+            throw workerException;
         }
     }
 

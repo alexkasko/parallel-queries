@@ -46,7 +46,7 @@ public class ParallelQueriesIteratorTest {
         // single thread used, buffer must me bigger than data
         ExecutorService sameThreadExecutor = MoreExecutors.sameThreadExecutor();
         ParallelQueriesIterator<String> iter = new ParallelQueriesIterator<String>(robin,
-                "select bar from foo where bar > :val", sameThreadExecutor, new SimpleMapper(), 10)
+                "select bar from foo where bar > :val", sameThreadExecutor, new SimpleMapper(), 10, 60)
                 .start(params);
         assertEquals("41", iter.next());
         assertEquals("42", iter.next());
@@ -81,7 +81,7 @@ public class ParallelQueriesIteratorTest {
             RoundRobinNpjtAccessor robin = new RoundRobinNpjtAccessor(builder.build());
             long start = currentTimeMillis();
             ParallelQueriesIterator<String> iter = new ParallelQueriesIterator<String>(robin, "select bar from foo",
-                    Executors.newCachedThreadPool(), new SlowpokeMapper(), 100)
+                    Executors.newCachedThreadPool(), new SlowpokeMapper(), 100, 60)
                     .start(params(count));
             int resCount = 0;
             while (iter.hasNext()) {
