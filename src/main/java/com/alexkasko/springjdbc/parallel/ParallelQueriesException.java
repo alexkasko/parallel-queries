@@ -11,13 +11,13 @@ import static java.lang.Thread.currentThread;
  * Date: 6/12/12
  * @see ParallelQueriesIterator
  */
-class ParallelQueriesException extends DataAccessException {
+public class ParallelQueriesException extends DataAccessException {
 
     ParallelQueriesException(String msg) {
         super("Thread: '" + currentThread().getName() + "', message: '" + msg + "'");
     }
 
-    public ParallelQueriesException(Throwable cause) {
+    ParallelQueriesException(Throwable cause) {
         super("Thread: '" + currentThread().getName() + "', message: '" + cause.getMessage() + "'", cause);
     }
 }

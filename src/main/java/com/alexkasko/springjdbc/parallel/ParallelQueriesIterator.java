@@ -33,8 +33,8 @@ import static org.springframework.util.StringUtils.hasText;
  * Iteration will block awaiting data loaded from sources.
  * Typical usage is to get new instance somewhere (spring prototype bean etc.), provide query params
  * with <code>start</code> method and iterate over until end.
- * Data source exceptions will be propagated as runtime exceptions thrown on 'next()' or 'hasNext()' call.
- * All parallel queries will be cancelled on one query error.
+ * Data source exceptions will be propagated propagated to caller (iterating) thread and given to {@link ParallelQueriesExceptionHandler}.
+ * All parallel queries will be cancelled on one query error, propagated by exception handler.
  * Iterator takes sql in the same format as {@code NamedParameterJdbcTemplate} does (with {@code :palceholders})
  * and map declared parameters to provided values using the same methods as {@code NamedParameterJdbcTemplate}.
  * <b>NOT</b> thread-safe (tbd: specify points that break thread safety), instance may be reused calling <code>start</code> method, but only in one thread simultaneously.
@@ -59,6 +59,7 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     private final ArrayBlockingQueue<Object> dataQueue;
     private final List<ParallelQueriesListener> listeners = Lists.newArrayList();
     private final int maxDataPollWaitSeconds;
+    private final ParallelQueriesExceptionHandler exceptionHandler;
 
     private AtomicBoolean started = new AtomicBoolean(false);
     private AtomicInteger sourcesRemained = new AtomicInteger(0);
@@ -82,17 +83,37 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     }
 
     /**
-     * Main constructor, uses {@code RowMapper} instead of mapper factory
+     * Shortcut constructor, uses {@code RowMapper} instead of mapper factory and {@code ThrowExceptionHandler}
+     * as exception handler
      *
      * @param sources data sources (wrapped into JDBC templates) accessor
      * @param sql query to execute using JdbcOperations
      * @param executor executor service to run parallel queries into
      * @param mapper will be used to get data from result sets
-     * @param bufferSize size of ArrayBlockingQueue data buffer
+     * @param bufferSize size of {@link ArrayBlockingQueue} data buffer
+     * @param maxDataPollWaitSeconds max time to wait for next piece of data from workers
      */
-    public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources,
-                                   String sql, ExecutorService executor, RowMapper<T> mapper, int bufferSize, int maxDataPollWaitSeconds) {
-        this(sources, sql, executor, SingletoneRowMapperFactory.of(mapper), bufferSize, maxDataPollWaitSeconds);
+    public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources, String sql, ExecutorService executor,
+                                   RowMapper<T> mapper, int bufferSize, int maxDataPollWaitSeconds) {
+        this(sources, sql, executor, SingletoneRowMapperFactory.of(mapper), new ThrowExceptionHandler(),
+                bufferSize, maxDataPollWaitSeconds);
+    }
+
+    /**
+     *
+     *
+     * @param sources data sources (wrapped into JDBC templates) accessor
+     * @param sql query to execute using JdbcOperations
+     * @param executor executor service to run parallel queries into
+     * @param mapper will be used to get data from result sets
+     * @param exceptionHandler workers exception handler
+     * @param bufferSize size of {@link ArrayBlockingQueue} data buffer
+     * @param maxDataPollWaitSeconds max time to wait for next piece of data from workers
+     */
+    public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources, String sql, ExecutorService executor,
+                                   RowMapper<T> mapper, ParallelQueriesExceptionHandler exceptionHandler,
+                                   int bufferSize, int maxDataPollWaitSeconds) {
+        this(sources, sql, executor, SingletoneRowMapperFactory.of(mapper), exceptionHandler, bufferSize, maxDataPollWaitSeconds);
     }
 
     /**
@@ -101,20 +122,25 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
      * @param sources data sources (wrapped into JDBC templates) accessor
      * @param sql query to execute using JdbcOperations
      * @param mapperFactory will be used to get data from result sets
+     * @param exceptionHandler workers exception handler
      * @param executor executor service to run parallel queries into
-     * @param bufferSize size of ArrayBlockingQueue data buffer
+     * @param bufferSize size of {@link ArrayBlockingQueue} data buffer
+     * @param maxDataPollWaitSeconds max time to wait for next piece of data from workers
      */
     public ParallelQueriesIterator(DataSourceAccessor<?, ?> sources,
-                                   String sql, ExecutorService executor, RowMapperFactory<T, ?> mapperFactory, int bufferSize, int maxDataPollWaitSeconds) {
+                                   String sql, ExecutorService executor, RowMapperFactory<T, ?> mapperFactory,
+                                   ParallelQueriesExceptionHandler exceptionHandler, int bufferSize, int maxDataPollWaitSeconds) {
         checkNotNull(sources, "Provided data source accessor is null");
         checkArgument(sources.size() > 0, "No data sources provided");
         checkArgument(hasText(sql), "Provided sql query is blank");
         checkNotNull(executor, "Provided executor is null");
         checkNotNull(mapperFactory, "Provided row mapper factory is null");
+        checkNotNull(exceptionHandler, "Provided exception handler is null");
         checkArgument(bufferSize > 0, "Buffer size mat be positive, but was: '%s'", bufferSize);
         this.sources = sources;
         this.sql = sql;
         this.mapperFactory = mapperFactory;
+        this.exceptionHandler = exceptionHandler;
         this.executor = executor;
         this.dataQueue = new ArrayBlockingQueue<Object>(bufferSize);
         this.maxDataPollWaitSeconds = maxDataPollWaitSeconds;
@@ -187,7 +213,10 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
         sb.append(", sources=").append(sources);
         sb.append(", sql='").append(sql).append('\'');
         sb.append(", mapperFactory=").append(mapperFactory);
+        sb.append(", exceptionHandler=").append(exceptionHandler);
+        sb.append(", listeners=").append(listeners);
         sb.append(", executor=").append(executor);
+        sb.append(", maxDataPollWaitSeconds=").append(maxDataPollWaitSeconds);
         sb.append(", started=").append(started);
         sb.append(", sourcesRemained=").append(sourcesRemained);
         sb.append(", cancelled=").append(cancelled);
@@ -234,10 +263,14 @@ public class ParallelQueriesIterator<T> extends AbstractIterator<T> {
     }
 
     private void checkException() {
-        RuntimeException workerException = exceptionHolder.get();
+        ParallelQueriesException workerException = exceptionHolder.get();
         if (null != workerException) {
-            cancel();
-            throw workerException;
+            try {
+                exceptionHandler.handle(workerException);
+            } catch (RuntimeException e) {
+                cancel();
+                throw e;
+            }
         }
     }
 

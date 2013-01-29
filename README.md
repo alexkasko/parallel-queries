@@ -22,7 +22,7 @@ Maven dependency (available in central repository):
     <dependency>
         <groupId>com.alexkasko.springjdbc</groupId>
         <artifactId>parallel-queries</artifactId>
-        <version>1.2.1</version>
+        <version>1.2.2</version>
     </dependency>
 
 To start parallel query execution you should create instance of `ParallelQueriesIterator` and call `start` method
@@ -53,11 +53,11 @@ To create instance of `ParallelQueriesIterator` you should provide:
 ####JdbcTemplate as data source
 
 JDBC data sources are represented by `javax.sql.DataSource` class. But some data sources may require fine tuning of JDBC
-resourcese usage (e.g. [set fetch size](http://static.springsource.org/spring/docs/3.0.6.RELEASE/api/org/springframework/jdbc/core/JdbcTemplate.html#setFetchSize(int)).
+resources usage (e.g. [set fetch size](http://static.springsource.org/spring/docs/3.0.6.RELEASE/api/org/springframework/jdbc/core/JdbcTemplate.html#setFetchSize(int)).
 Iterator uses `JdbcTemplate` to actually execute queries. If application provides collection of data sources, then
 `JdbcTemplate` with default settings is created for each data source.
 
-To support JDBC tuning iterator can take collection of preconfigured `JdbcTemplate`'s instead of `DataSource`'s.
+To support JDBC tuning, iterator can take collection of preconfigured `JdbcTemplate`'s instead of `DataSource`'s.
 
 ####data source accessors
 
@@ -84,10 +84,10 @@ To use query parameters in result set's mapping you may provide `RowMapperFactor
 ###Starting queries execution
 
 Queries are executed in background threads. After instance creation `ParallelQueriesIterator` is a "passive" object and
-will throw `IllegalStateException` on attemt to iterate over it.
+will throw `IllegalStateException` on attempt to iterate over it.
 
 To start actual query execution you must call `start` method providing collection of parameters mappings. It fires
-background workers, that will be active untill all results are read from iterator or execution cancelled.
+background workers, that will be active until all results are read from iterator or execution cancelled.
 
 Finished (exhausted) iterator may be restarted calling `start` another time.
 
@@ -97,16 +97,23 @@ Queries execution may be cancelled calling `cancel` method:
 
  * `cancelled` flag will be set
  * all active JDBC queries will be cancelled using [cancel](http://docs.oracle.com/javase/6/docs/api/java/sql/Statement.html#cancel())
- method (errors from unsuppoting drivers will be ignored)
+ method (errors from unsupporting drivers will be ignored)
  * all active background threads will be interrupted
- * subsequent iterator accesse will result in `ParallelQueriesException`
+ * subsequent iterator access will result in `ParallelQueriesException`
  * cancelled iterator cannot be restarted
 
 ###Queries execution listeners
 
 `ParallelQueriesListener` implementations may be attached to `ParallelQueriesIterator`.
-Listeners will be notified about all successfull and errored queries immediately
+Listeners will be notified about all successful and errored queries immediately
 after query execution. Listeners are called from worker threads, so their implementation must be thread-safe.
+
+###Exception handlers
+
+By default, exceptions, happened in worker threads, will be wrapped into `ParallelQueriesException`, propagated to caller
+(iterating) thread and thrown there. You may add your own implementation of `ParallelQueriesExceptionHandler`.
+It may suppress incoming exception or throw it (ot some other `RuntimeException`). Workers execution will be canceled
+on throw from exception handler.
 
 How does it work
 ----------------
@@ -126,6 +133,10 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**1.2.2** (2013-01-29)
+
+ * `ParallelQueriesExceptionHandler` support added
+
 **1.2.1** (2013-01-22)
 
  * errors reporting fix
