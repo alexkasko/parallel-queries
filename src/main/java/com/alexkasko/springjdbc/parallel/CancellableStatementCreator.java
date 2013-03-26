@@ -1,14 +1,15 @@
 package com.alexkasko.springjdbc.parallel;
 
 import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.PreparedStatementCreatorFactory;
 import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.core.StatementCreatorUtils;
+import org.springframework.jdbc.core.namedparam.NamedParameterUtils;
 import org.springframework.jdbc.core.namedparam.ParsedSql;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -32,7 +33,7 @@ class CancellableStatementCreator implements PreparedStatementCreator {
     private final String registryKey;
     private final Map<String, Statement> registry;
     private final String sql;
-    private final SqlParameterSource params;
+    private final SqlParameterSource paramSource;
 
     /**
      * Main constructor
@@ -50,7 +51,7 @@ class CancellableStatementCreator implements PreparedStatementCreator {
         this.registryKey = registryKey;
         this.registry = registry;
         this.sql = sql;
-        this.params = params;
+        this.paramSource = params;
     }
 
     /**
@@ -58,17 +59,15 @@ class CancellableStatementCreator implements PreparedStatementCreator {
      */
     @Override
     public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
-        final PreparedStatement stmt;
         // substitute named params,
         // see NamedParameterJdbcTemplate#getPreparedStatementCreator(String sql, SqlParameterSource paramSource)
         ParsedSql parsedSql = parseSqlStatement(sql);
-        String sqlToUse = substituteNamedParameters(parsedSql, params);
-        stmt = con.prepareStatement(sqlToUse);
-        Object[] parArray = buildValueArray(parsedSql, params, null);
-        List<SqlParameter> parList = buildSqlParameterList(parsedSql, params);
-        for(int i = 0; i < parArray.length; i++) {
-            setParameterValue(stmt, i + 1, parList.get(i), parArray[i]);
-        }
+        String sqlToUse = NamedParameterUtils.substituteNamedParameters(parsedSql, paramSource);
+        Object[] params = NamedParameterUtils.buildValueArray(parsedSql, paramSource, null);
+        List<SqlParameter> declaredParameters = NamedParameterUtils.buildSqlParameterList(parsedSql, paramSource);
+        PreparedStatementCreatorFactory pscf = new PreparedStatementCreatorFactory(sqlToUse, declaredParameters);
+        PreparedStatementCreator psc = pscf.newPreparedStatementCreator(params);
+        PreparedStatement stmt = psc.createPreparedStatement(con);
         registry.put(registryKey, stmt);
         return stmt;
     }
@@ -82,7 +81,7 @@ class CancellableStatementCreator implements PreparedStatementCreator {
         sb.append("CancellableStatementCreator");
         sb.append("{registryKey='").append(registryKey).append('\'');
         sb.append(", sql='").append(sql).append('\'');
-        sb.append(", params=").append(params);
+        sb.append(", paramSource=").append(paramSource);
         sb.append('}');
         return sb.toString();
     }

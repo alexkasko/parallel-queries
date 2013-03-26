@@ -22,7 +22,7 @@ Maven dependency (available in central repository):
     <dependency>
         <groupId>com.alexkasko.springjdbc</groupId>
         <artifactId>parallel-queries</artifactId>
-        <version>1.2.2</version>
+        <version>1.2.3</version>
     </dependency>
 
 To start parallel query execution you should create instance of `ParallelQueriesIterator` and call `start` method
@@ -133,6 +133,10 @@ This project is released under the [Apache License 2.0](http://www.apache.org/li
 
 Changelog
 ---------
+**1.2.3** (2013-03-26)
+
+ * named parameters fix - "in" clauses are supported now
+
 **1.2.2** (2013-01-29)
 
  * `ParallelQueriesExceptionHandler` support added

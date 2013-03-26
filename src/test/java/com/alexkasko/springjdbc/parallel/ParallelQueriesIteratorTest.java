@@ -6,13 +6,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
 import org.springframework.dao.DataAccessException;
-import org.springframework.jdbc.core.ResultSetExtractor;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.jdbc.core.*;
+import org.springframework.jdbc.core.namedparam.*;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
@@ -24,6 +23,8 @@ import static java.lang.System.currentTimeMillis;
 import static org.apache.commons.lang.RandomStringUtils.randomAlphanumeric;
 import static org.apache.commons.lang.RandomStringUtils.randomAscii;
 import static org.junit.Assert.assertEquals;
+import static org.springframework.jdbc.core.StatementCreatorUtils.setParameterValue;
+import static org.springframework.jdbc.core.namedparam.NamedParameterUtils.*;
 
 /**
  * User: alexkasko
@@ -92,6 +93,25 @@ public class ParallelQueriesIteratorTest {
             System.out.println("200000 records from 20 threads: " + (currentTimeMillis() - start));
             assertEquals(resCount, 10000 * count);
         }
+    }
+
+    @Test
+    public void testInClause() {
+        NamedParameterJdbcTemplate jt = createJT();
+        final SqlParameterSource paramSource = new MapSqlParameterSource(ImmutableMap.of("numbers", ImmutableList.of(1,2,3)));
+        ParsedSql parsedSql = parseSqlStatement("select 42 where 1 in (:numbers)");
+        String sqlToUse = NamedParameterUtils.substituteNamedParameters(parsedSql, paramSource);
+        Object[] params = NamedParameterUtils.buildValueArray(parsedSql, paramSource, null);
+        List<SqlParameter> declaredParameters = NamedParameterUtils.buildSqlParameterList(parsedSql, paramSource);
+        PreparedStatementCreatorFactory pscf = new PreparedStatementCreatorFactory(sqlToUse, declaredParameters);
+        PreparedStatementCreator psc = pscf.newPreparedStatementCreator(params);
+        jt.getJdbcOperations().query(psc,
+                new ResultSetExtractor<Object>() {
+                    @Override
+                    public Object extractData(ResultSet rs) throws SQLException, DataAccessException {
+                        return null;
+                    }
+                });
     }
 
     private NamedParameterJdbcTemplate createJT() {
